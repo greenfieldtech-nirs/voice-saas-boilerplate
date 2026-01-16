@@ -1,31 +1,36 @@
 # Dependencies
-/vendor/
-/node_modules/
-/frontend/node_modules/
+backend/vendor/
+backend/node_modules/
+frontend/node_modules/
 
 # Laravel
-/bootstrap/cache/
-/storage/app/
-/storage/framework/cache/
-/storage/framework/sessions/
-/storage/framework/views/
-/storage/logs/
+backend/bootstrap/cache/
+backend/storage/app/
+backend/storage/framework/cache/
+backend/storage/framework/sessions/
+backend/storage/framework/views/
+backend/storage/logs/
 
 # React/Node.js
-/frontend/build/
-/frontend/dist/
-/build/
-/dist/
-/.next/
-/.nuxt/
-/.cache/
+frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/.nuxt/
+frontend/.cache/
+
+# Root level build artifacts
+build/
+dist/
+.next/
+.nuxt/
+.cache/
 
 # Environment files
 .env
 .env.local
 .env.*.local
-/backend/.env
-/frontend/.env
+backend/.env
+frontend/.env
 
 # Docker
 docker/data/
@@ -99,7 +104,7 @@ composer.lock
 *.backup
 
 # MinIO data (if running locally)
-/minio-data/
+minio-data/
 
 # Redis dumps
 dump.rdb
@@ -109,16 +114,70 @@ dump.rdb
 *.db
 
 # Testing
-/tests/_output/
-/tests/_reports/
+backend/tests/_output/
+backend/tests/_reports/
 
 # CI/CD
 .github/workflows/
 .gitlab-ci.yml
 
 # Documentation builds
-/docs/build/
-/docs/.vuepress/dist/
+docs/build/
+docs/.vuepress/dist/
 
 # Local development
 .local
+
+# Docker volumes (local development)
+docker/volumes/
+
+# Laravel Sail
+sail
+
+# JetBrains IDEs
+.idea/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Composer
+backend/composer.lock
+
+# NPM
+frontend/package-lock.json
+frontend/yarn.lock
+
+# PHP CS Fixer
+.php-cs-fixer.cache
+
+# PHPUnit
+backend/phpunit.xml
+backend/.phpunit.result.cache
