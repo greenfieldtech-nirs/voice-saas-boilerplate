@@ -7,7 +7,7 @@ WORKDIR /app
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies
+# Install dependencies (including dev dependencies for Tailwind)
 RUN npm install
 
 # Copy source code
