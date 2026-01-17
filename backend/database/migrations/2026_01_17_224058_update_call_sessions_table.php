@@ -18,6 +18,9 @@ return new class extends Migration
                   ->change();
 
             // Add new columns for Cloudonix webhook data (only those not already existing)
+            $table->string('domain')->nullable()->after('session_id');
+            $table->string('caller_id')->nullable()->after('domain');
+            $table->string('destination')->nullable()->after('caller_id');
             $table->string('token')->nullable()->after('direction');
             $table->string('vapp_server')->nullable()->after('token');
             $table->timestamp('call_start_time')->nullable()->after('vapp_server');
@@ -44,12 +47,11 @@ return new class extends Migration
             $table->dropIndex(['status', 'tenant_id']);
             $table->dropIndex(['call_start_time']);
 
-            // Drop new columns
+            // Drop new columns (only those added by this migration)
             $table->dropColumn([
                 'domain',
                 'caller_id',
                 'destination',
-                'direction',
                 'token',
                 'vapp_server',
                 'call_start_time',
