@@ -12,16 +12,26 @@ class CallSession extends Model
         'tenant_id',
         'session_id',
         'call_id',
+        'domain',
+        'caller_id',
+        'destination',
         'direction',
         'from_number',
         'to_number',
+        'token',
         'status',
+        'vapp_server',
         'state',
         'metadata',
         'started_at',
         'answered_at',
         'ended_at',
         'duration_seconds',
+        'call_start_time',
+        'call_answer_time',
+        'answer_time',
+        'webhook_created_at',
+        'webhook_modified_at',
     ];
 
     protected $casts = [
@@ -30,6 +40,11 @@ class CallSession extends Model
         'started_at' => 'datetime',
         'answered_at' => 'datetime',
         'ended_at' => 'datetime',
+        'call_start_time' => 'datetime',
+        'call_answer_time' => 'datetime',
+        'answer_time' => 'datetime',
+        'webhook_created_at' => 'datetime',
+        'webhook_modified_at' => 'datetime',
     ];
 
     /**

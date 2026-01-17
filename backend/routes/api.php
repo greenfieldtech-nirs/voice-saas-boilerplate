@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\TenantController;
 use App\Http\Controllers\Api\VoiceApplicationController;
 use Illuminate\Http\Request;
@@ -47,6 +48,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tenants/{tenant}/users', [TenantController::class, 'users']);
     Route::post('/tenants/{tenant}/users', [TenantController::class, 'addUser']);
     Route::delete('/tenants/{tenant}/users/{user}', [TenantController::class, 'removeUser']);
+
+    // Call monitoring and statistics
+    Route::get('/calls/active', [CallController::class, 'active']);
+    Route::get('/calls/statistics', [CallController::class, 'statistics']);
 });
 
 // Voice Application Webhook Endpoints (Public - no authentication required)

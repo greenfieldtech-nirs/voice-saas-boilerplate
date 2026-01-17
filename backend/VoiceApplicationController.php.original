@@ -96,24 +96,16 @@ class VoiceApplicationController extends Controller
             // Basic webhook validation
             $this->validateWebhookRequest($request);
 
-            // Validate Cloudonix webhook payload structure
             $validator = Validator::make($request->all(), [
-                'id' => 'required|integer', // Cloudonix session ID
-                'domain' => 'required|string', // Domain for tenant resolution
-                'token' => 'required|string', // Unique session token
-                'status' => 'required|string', // Call status
-                'callerId' => 'nullable|string',
-                'destination' => 'nullable|string',
-                'direction' => 'nullable|string',
-                'createdAt' => 'nullable|date',
-                'modifiedAt' => 'nullable|date',
-                'callStartTime' => 'nullable|integer',
-                'answerTime' => 'nullable|date',
-                'vappServer' => 'nullable|string',
+                'session_id' => 'required|string',
+                'event_type' => 'required|string',
+                'event_id' => 'required|string',
+                'occurred_at' => 'required|date',
+                'data' => 'required|array',
             ]);
 
             if ($validator->fails()) {
-                Log::warning('Invalid Cloudonix session update webhook payload', [
+                Log::warning('Invalid session update webhook payload', [
                     'errors' => $validator->errors(),
                     'payload' => $request->all(),
                     'headers' => $request->headers->all(),
@@ -122,75 +114,42 @@ class VoiceApplicationController extends Controller
                 return response('Invalid payload', 400);
             }
 
-            $webhookData = $validator->validated();
+            $data = $validator->validated();
 
-            // Resolve tenant from domain
-            $tenant = \App\Models\Tenant::where('domain', $webhookData['domain'])->first();
-            if (! $tenant) {
-                Log::warning('Tenant not found for domain in webhook', [
-                    'domain' => $webhookData['domain'],
-                    'session_id' => $webhookData['id'],
+            // Find the call session
+            $callSession = CallSession::where('session_id', $data['session_id'])->first();
+
+            if (! $callSession) {
+                Log::warning('Call session not found for webhook', [
+                    'session_id' => $data['session_id'],
+                    'event_type' => $data['event_type'],
                 ]);
 
-                return response('Tenant not found', 404);
+                return response('Session not found', 404);
             }
 
-            // Map Cloudonix status to internal status
-            $internalStatus = $this->mapCloudonixStatus($webhookData['status']);
-
-            // Calculate duration if we have timestamps
-            $durationSeconds = null;
-            if ($webhookData['answerTime'] && $webhookData['callStartTime']) {
-                $answerTime = strtotime($webhookData['answerTime']);
-                $callStartTime = $webhookData['callStartTime'] / 1000; // Convert from milliseconds
-                $durationSeconds = max(0, $answerTime - $callStartTime);
-            }
-
-            // Upsert call session (single row per token)
-            $callSession = CallSession::updateOrCreate(
-                ['token' => $webhookData['token']], // Use token as unique identifier
+            // Store the event (idempotent - will skip if event_id already exists)
+            $callEvent = CallEvent::firstOrCreate(
+                ['event_id' => $data['event_id']],
                 [
-                    'tenant_id' => $tenant->id,
-                    'session_id' => (string) $webhookData['id'],
-                    'domain' => $webhookData['domain'],
-                    'caller_id' => $webhookData['callerId'],
-                    'destination' => $webhookData['destination'],
-                    'direction' => $webhookData['direction'] ?? 'inbound',
-                    'status' => $internalStatus,
-                    'vapp_server' => $webhookData['vappServer'],
-                    'call_start_time' => $webhookData['callStartTime'] ? now()->createFromTimestampMs($webhookData['callStartTime']) : null,
-                    'call_answer_time' => $webhookData['answerTime'] ? now()->parse($webhookData['answerTime']) : null,
-                    'answer_time' => $webhookData['answerTime'] ? now()->parse($webhookData['answerTime']) : null,
-                    'webhook_created_at' => $webhookData['createdAt'] ? now()->parse($webhookData['createdAt']) : null,
-                    'webhook_modified_at' => $webhookData['modifiedAt'] ? now()->parse($webhookData['modifiedAt']) : null,
-                    'duration_seconds' => $durationSeconds,
-                    'metadata' => $request->all(), // Store complete webhook payload
+                    'tenant_id' => $callSession->tenant_id,
+                    'call_session_id' => $callSession->id,
+                    'event_type' => $data['event_type'],
+                    'payload' => $data['data'],
+                    'headers' => $request->headers->all(),
+                    'occurred_at' => $data['occurred_at'],
+                    'processing_status' => 'completed',
                 ]
             );
 
-            // Store webhook event for audit trail
-            CallEvent::create([
-                'tenant_id' => $tenant->id,
-                'call_session_id' => $callSession->id,
-                'event_type' => 'session_update',
-                'event_id' => 'session_update_' . $webhookData['token'] . '_' . now()->timestamp,
-                'payload' => $request->all(),
-                'headers' => $request->headers->all(),
-                'occurred_at' => $webhookData['modifiedAt'] ? now()->parse($webhookData['modifiedAt']) : now(),
-                'processing_status' => 'completed',
-            ]);
+            // Update call session state based on event type
+            $this->updateCallSessionFromEvent($callSession, $data);
 
-            // Broadcast WebSocket event for real-time updates
-            $this->broadcastCallUpdate($callSession);
-
-            Log::info('Cloudonix session update webhook processed', [
-                'session_id' => $webhookData['id'],
-                'token' => $webhookData['token'],
-                'domain' => $webhookData['domain'],
-                'status' => $webhookData['status'],
-                'internal_status' => $internalStatus,
-                'tenant_id' => $tenant->id,
-                'duration_seconds' => $durationSeconds,
+            Log::info('Session update webhook processed', [
+                'session_id' => $data['session_id'],
+                'event_type' => $data['event_type'],
+                'event_id' => $data['event_id'],
+                'tenant_id' => $callSession->tenant_id,
             ]);
 
             return response('OK', 200);
@@ -382,53 +341,6 @@ class VoiceApplicationController extends Controller
         // Simple conversion - in production you might want a proper XML builder
         // For now, assume it's stored as XML string in the database
         return json_encode($cxmlArray);
-    }
-
-    /**
-     * Map Cloudonix status to internal status
-     */
-    private function mapCloudonixStatus(string $cloudonixStatus): string
-    {
-        $statusMap = [
-            'ringing' => 'ringing',
-            'connected' => 'connected',  // Keep as connected (not answered)
-            'processing' => 'ringing',
-            'answer' => 'answered',
-            'answered' => 'answered',
-            'new' => 'ringing',
-            'noanswer' => 'failed',
-            'busy' => 'busy',
-            'nocredit' => 'failed',
-            'cancel' => 'failed',
-            'external' => 'failed',
-            'error' => 'failed',
-            'completed' => 'completed',
-            'failed' => 'failed',
-        ];
-
-        return $statusMap[$cloudonixStatus] ?? 'ringing'; // Default to ringing
-    }
-
-    /**
-     * Broadcast call update via WebSocket
-     */
-    private function broadcastCallUpdate(CallSession $callSession): void
-    {
-        try {
-            // TODO: Implement WebSocket broadcasting in Phase 4
-            // For now, just log that we would broadcast
-            Log::info('Call update broadcast (WebSocket not yet implemented)', [
-                'session_id' => $callSession->session_id,
-                'token' => $callSession->token,
-                'status' => $callSession->status,
-                'tenant_id' => $callSession->tenant_id,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Failed to broadcast call update', [
-                'session_id' => $callSession->session_id,
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 
     /**
