@@ -38,7 +38,7 @@ export const HowItWorks: React.FC = () => {
         {/* Section header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            How VoiceFlow Works
+            How AI Voice SaaS Works
           </h2>
           <p className="text-lg text-gray-600">
             Get started in minutes with our streamlined process.
@@ -99,7 +99,7 @@ export const HowItWorks: React.FC = () => {
               Ready to Get Started?
             </h3>
             <p className="text-gray-600 mb-6">
-              Join thousands of businesses already using VoiceFlow to transform their voice communications.
+              Join thousands of businesses already using AI Voice SaaS to transform their voice communications.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-xl transition-all duration-200">

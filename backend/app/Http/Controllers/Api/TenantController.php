@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class TenantController extends Controller
@@ -44,7 +44,7 @@ class TenantController extends Controller
         $originalSlug = $validated['slug'];
         $counter = 1;
         while (Tenant::where('slug', $validated['slug'])->exists()) {
-            $validated['slug'] = $originalSlug . '-' . $counter;
+            $validated['slug'] = $originalSlug.'-'.$counter;
             $counter++;
         }
 
@@ -68,7 +68,7 @@ class TenantController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'domain' => 'nullable|string|max:255|unique:tenants,domain,' . $tenant->id,
+            'domain' => 'nullable|string|max:255|unique:tenants,domain,'.$tenant->id,
             'settings' => 'nullable|array',
             'is_active' => 'boolean',
             'trial_ends_at' => 'nullable|date',
@@ -81,7 +81,7 @@ class TenantController extends Controller
             $originalSlug = $validated['slug'];
             $counter = 1;
             while (Tenant::where('slug', $validated['slug'])->where('id', '!=', $tenant->id)->exists()) {
-                $validated['slug'] = $originalSlug . '-' . $counter;
+                $validated['slug'] = $originalSlug.'-'.$counter;
                 $counter++;
             }
         }

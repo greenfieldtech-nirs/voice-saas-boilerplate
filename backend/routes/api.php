@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TenantController;
+use App\Http\Controllers\Api\VoiceApplicationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -16,17 +18,46 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Authentication routes
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
+Route::middleware('auth:sanctum')->post('/logout', [AuthController::class, 'logout']);
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
 // Protected API routes
 Route::middleware('auth:sanctum')->group(function () {
-    // Tenant management
-    Route::apiResource('tenants', TenantController::class);
+    // User profile management
+    Route::get('/profile', [AuthController::class, 'profile']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::put('/profile/password', [AuthController::class, 'changePassword']);
+    Route::get('/profile/setup-status', [AuthController::class, 'needsSetup']);
+
+    // Settings management
+    Route::get('/settings', [AuthController::class, 'getSettings']);
+    Route::put('/settings', [AuthController::class, 'updateSettings']);
+
+    // Tenant management (except store which is public)
+    Route::get('/tenants', [TenantController::class, 'index']);
+    Route::get('/tenants/{tenant}', [TenantController::class, 'show']);
+    Route::put('/tenants/{tenant}', [TenantController::class, 'update']);
+    Route::delete('/tenants/{tenant}', [TenantController::class, 'destroy']);
 
     // User management within tenant context
     Route::get('/tenants/{tenant}/users', [TenantController::class, 'users']);
     Route::post('/tenants/{tenant}/users', [TenantController::class, 'addUser']);
     Route::delete('/tenants/{tenant}/users/{user}', [TenantController::class, 'removeUser']);
+});
+
+// Voice Application Webhook Endpoints (Public - no authentication required)
+// These endpoints receive webhooks from Cloudonix and must be accessible externally
+Route::prefix('voice')->group(function () {
+    // Initial voice application request (when call is made to application)
+    Route::post('/application/{applicationId}', [VoiceApplicationController::class, 'handleApplication']);
+
+    // Session update webhooks (status changes, events)
+    Route::post('/session/update', [VoiceApplicationController::class, 'handleSessionUpdate']);
+
+    // CDR (Call Detail Record) callbacks (final call data)
+    Route::post('/session/cdr', [VoiceApplicationController::class, 'handleCdrCallback']);
 });

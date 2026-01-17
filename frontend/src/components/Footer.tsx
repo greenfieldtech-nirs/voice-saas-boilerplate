@@ -10,7 +10,7 @@ export const Footer: React.FC = () => {
             <div className="flex items-center mb-4">
               <span className="text-2xl mr-2">🎙️</span>
               <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                VoiceFlow
+                AI Voice SaaS
               </span>
             </div>
             <p className="text-gray-400 mb-4 leading-relaxed">
@@ -80,7 +80,7 @@ export const Footer: React.FC = () => {
 
         <div className="flex flex-col md:flex-row justify-between items-center">
           <p className="text-gray-400 text-sm">
-            © 2024 VoiceFlow. All rights reserved. Built with ❤️ for voice innovation.
+            © 2024 AI Voice SaaS. All rights reserved. Built with ❤️ for voice innovation.
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
             <a href="https://voiceflow.com/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white text-sm transition-colors">

@@ -3,7 +3,7 @@ import React from 'react';
 export const Testimonials: React.FC = () => {
   const testimonials = [
     {
-      quote: "VoiceFlow transformed our customer service operations. The AI-powered IVR system handles 80% of our calls automatically, and the remaining calls go to the right department instantly.",
+      quote: "AI Voice SaaS transformed our customer service operations. The AI-powered IVR system handles 80% of our calls automatically, and the remaining calls go to the right department instantly.",
       author: "Sarah Chen",
       title: "CTO, TechCorp Solutions",
       avatar: "SC",
@@ -34,7 +34,7 @@ export const Testimonials: React.FC = () => {
             Loved by Developers & Businesses
           </h2>
           <p className="text-lg text-gray-600">
-            See what our customers say about building voice applications with VoiceFlow.
+            See what our customers say about building voice applications with AI Voice SaaS.
           </p>
         </div>
 

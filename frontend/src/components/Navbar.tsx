@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 export const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const isAuthenticated = () => {
+    return localStorage.getItem('token') !== null;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   return (
     <header className="fixed w-full z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
@@ -11,7 +23,7 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center">
             <span className="text-2xl mr-2">🎙️</span>
             <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              VoiceFlow
+              AI Voice SaaS
             </span>
           </div>
 
@@ -29,12 +41,29 @@ export const Navbar: React.FC = () => {
             <a href="#contact" className="text-gray-600 hover:text-indigo-600 transition-colors">
               Contact
             </a>
-            <button className="text-gray-600 hover:text-indigo-600 px-4 py-2 rounded-lg transition-colors">
-              Sign In
-            </button>
-            <button className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all">
-              Get Started
-            </button>
+
+            {isAuthenticated() ? (
+              <>
+                <Link to="/admin" className="text-gray-600 hover:text-indigo-600 px-4 py-2 rounded-lg transition-colors">
+                  Dashboard
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="text-gray-600 hover:text-indigo-600 px-4 py-2 rounded-lg transition-colors"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="text-gray-600 hover:text-indigo-600 px-4 py-2 rounded-lg transition-colors">
+                  Sign In
+                </Link>
+                <Link to="/register" className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all">
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -63,17 +92,32 @@ export const Navbar: React.FC = () => {
               <a href="#testimonials" className="block px-3 py-2 text-gray-600 hover:text-indigo-600 transition-colors">
                 Testimonials
               </a>
-              <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-indigo-600 transition-colors">
-                Contact
-              </a>
-              <div className="px-3 py-2 space-y-2">
-                <button className="block w-full text-left text-gray-600 hover:text-indigo-600 transition-colors">
-                  Sign In
-                </button>
-                <button className="block w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
-                  Get Started
-                </button>
-              </div>
+               <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-indigo-600 transition-colors">
+                 Contact
+               </a>
+
+               {isAuthenticated() ? (
+                 <div className="px-3 py-2 space-y-2">
+                   <Link to="/admin" className="block w-full text-left text-gray-600 hover:text-indigo-600 transition-colors">
+                     Dashboard
+                   </Link>
+                   <button
+                     onClick={handleLogout}
+                     className="block w-full text-left text-gray-600 hover:text-indigo-600 transition-colors"
+                   >
+                     Sign Out
+                   </button>
+                 </div>
+               ) : (
+                 <div className="px-3 py-2 space-y-2">
+                   <Link to="/login" className="block w-full text-left text-gray-600 hover:text-indigo-600 transition-colors">
+                     Sign In
+                   </Link>
+                   <Link to="/register" className="block w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all text-center">
+                     Get Started
+                   </Link>
+                 </div>
+               )}
             </div>
           </div>
         )}

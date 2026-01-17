@@ -83,7 +83,7 @@ export const Hero: React.FC = () => {
                   <div className="w-3 h-3 bg-red-400 rounded-full"></div>
                   <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
                   <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                  <span className="ml-4 text-sm text-gray-600">VoiceFlow Dashboard</span>
+                  <span className="ml-4 text-sm text-gray-600">AI Voice SaaS Dashboard</span>
                 </div>
               </div>
               <div className="p-8">
