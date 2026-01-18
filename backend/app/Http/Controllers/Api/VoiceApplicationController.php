@@ -11,7 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 /**
  * VoiceApplicationController handles webhook endpoints for Cloudonix Voice Applications
@@ -173,7 +172,7 @@ class VoiceApplicationController extends Controller
                 'tenant_id' => $tenant->id,
                 'call_session_id' => $callSession->id,
                 'event_type' => 'session_update',
-                'event_id' => 'session_update_' . $webhookData['token'] . '_' . now()->timestamp,
+                'event_id' => 'session_update_'.$webhookData['token'].'_'.now()->timestamp,
                 'payload' => $request->all(),
                 'headers' => $request->headers->all(),
                 'occurred_at' => $webhookData['modifiedAt'] ? now()->parse($webhookData['modifiedAt']) : now(),
@@ -217,22 +216,25 @@ class VoiceApplicationController extends Controller
             // Basic webhook validation
             $this->validateWebhookRequest($request);
 
+            // Validate Cloudonix CDR webhook payload structure
             $validator = Validator::make($request->all(), [
-                'session_id' => 'required|string',
-                'cdr' => 'required|array',
-                'cdr.call_id' => 'required|string',
-                'cdr.from' => 'required|string',
-                'cdr.to' => 'required|string',
-                'cdr.direction' => ['required', Rule::in(['inbound', 'outbound'])],
-                'cdr.status' => 'required|string',
-                'cdr.started_at' => 'nullable|date',
-                'cdr.answered_at' => 'nullable|date',
-                'cdr.ended_at' => 'nullable|date',
-                'cdr.duration' => 'nullable|integer',
+                'call_id' => 'required|string',
+                'domain' => 'required|string',
+                'from' => 'nullable|string',
+                'to' => 'nullable|string',
+                'disposition' => 'required|string',
+                'duration' => 'nullable|integer',
+                'billsec' => 'nullable|integer',
+                'timestamp' => 'nullable|integer',
+                'session' => 'nullable|array',
+                'session.token' => 'nullable|string',
+                'session.callStartTime' => 'nullable|integer',
+                'session.callAnswerTime' => 'nullable|integer',
+                'session.callEndTime' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
-                Log::warning('Invalid CDR webhook payload', [
+                Log::warning('Invalid Cloudonix CDR webhook payload', [
                     'errors' => $validator->errors(),
                     'payload' => $request->all(),
                     'headers' => $request->headers->all(),
@@ -241,60 +243,82 @@ class VoiceApplicationController extends Controller
                 return response('Invalid payload', 400);
             }
 
-            $data = $validator->validated();
-            $cdr = $data['cdr'];
+            $cdrData = $validator->validated();
 
-            // Find or create the call session
-            $callSession = CallSession::firstOrCreate(
-                ['session_id' => $data['session_id']],
+            // Resolve tenant from domain
+            $tenant = \App\Models\Tenant::where('domain', $cdrData['domain'])->first();
+            if (! $tenant) {
+                Log::warning('Tenant not found for domain in CDR webhook', [
+                    'domain' => $cdrData['domain'],
+                    'call_id' => $cdrData['call_id'],
+                ]);
+
+                return response('Tenant not found', 404);
+            }
+
+            // Map Cloudonix disposition to standardized disposition
+            $disposition = $this->mapCdrDisposition($cdrData['disposition']);
+
+            // Determine direction from session data if available
+            $direction = 'inbound'; // Default
+            if (isset($cdrData['session'])) {
+                // Try to determine direction from session data
+                // This might need adjustment based on actual Cloudonix data
+                $direction = 'inbound'; // Placeholder
+            }
+
+            // Prepare CDR data for storage
+            $cdrRecordData = [
+                'tenant_id' => $tenant->id,
+                'call_id' => $cdrData['call_id'],
+                'session_token' => $cdrData['session']['token'] ?? null,
+                'from_number' => $cdrData['from'],
+                'to_number' => $cdrData['to'],
+                'direction' => $direction,
+                'disposition' => $disposition,
+                'start_time' => isset($cdrData['session']['callStartTime'])
+                    ? now()->createFromTimestampMs($cdrData['session']['callStartTime'])
+                    : null,
+                'answer_time' => isset($cdrData['session']['callAnswerTime'])
+                    ? now()->createFromTimestampMs($cdrData['session']['callAnswerTime'])
+                    : null,
+                'end_time' => isset($cdrData['session']['callEndTime'])
+                    ? now()->createFromTimestampMs($cdrData['session']['callEndTime'])
+                    : null,
+                'duration_seconds' => $cdrData['duration'] ?? null,
+                'billsec' => $cdrData['billsec'] ?? null,
+                'domain' => $cdrData['domain'],
+                'subscriber' => $cdrData['subscriber'] ?? null,
+                'cx_trunk_id' => $cdrData['cx_trunk_id'] ?? null,
+                'application' => $cdrData['application'] ?? null,
+                'route' => $cdrData['route'] ?? null,
+                'vapp_server' => $cdrData['vapp_server'] ?? $cdrData['session']['vappServer'] ?? null,
+                'raw_cdr' => $request->all(), // Store complete webhook payload
+            ];
+
+            // Store CDR record (upsert to prevent duplicates)
+            $cdrLog = \App\Models\CdrLog::updateOrCreate(
                 [
-                    'tenant_id' => 1, // TODO: Determine tenant from webhook context
-                    'call_id' => $cdr['call_id'],
-                    'direction' => $cdr['direction'],
-                    'from_number' => $cdr['from'],
-                    'to_number' => $cdr['to'],
-                    'status' => $cdr['status'],
-                ]
+                    'tenant_id' => $tenant->id,
+                    'call_id' => $cdrData['call_id'],
+                ],
+                $cdrRecordData
             );
 
-            // Update call session with final CDR data
-            $callSession->update([
-                'status' => $cdr['status'],
-                'started_at' => $cdr['started_at'] ?? $callSession->started_at,
-                'answered_at' => $cdr['answered_at'] ?? $callSession->answered_at,
-                'ended_at' => $cdr['ended_at'] ?? $callSession->ended_at,
-                'duration_seconds' => $cdr['duration'] ?? $callSession->duration_seconds,
-                'state' => array_merge($callSession->state ?? [], ['cdr_received' => true]),
-                'metadata' => array_merge($callSession->metadata ?? [], [
-                    'cdr_data' => $cdr,
-                    'webhook_headers' => $request->headers->all(),
-                ]),
-            ]);
-
-            // Store CDR event
-            CallEvent::create([
-                'tenant_id' => $callSession->tenant_id,
-                'call_session_id' => $callSession->id,
-                'event_type' => 'cdr',
-                'event_id' => 'cdr_'.$data['session_id'].'_'.now()->timestamp,
-                'payload' => $cdr,
-                'headers' => $request->headers->all(),
-                'occurred_at' => $cdr['ended_at'] ?? now(),
-                'processing_status' => 'completed',
-            ]);
-
-            Log::info('CDR callback processed', [
-                'session_id' => $data['session_id'],
-                'call_id' => $cdr['call_id'],
-                'status' => $cdr['status'],
-                'duration' => $cdr['duration'],
-                'tenant_id' => $callSession->tenant_id,
+            Log::info('Cloudonix CDR webhook processed', [
+                'call_id' => $cdrData['call_id'],
+                'disposition' => $cdrData['disposition'],
+                'mapped_disposition' => $disposition,
+                'domain' => $cdrData['domain'],
+                'tenant_id' => $tenant->id,
+                'duration' => $cdrData['duration'],
+                'cdr_log_id' => $cdrLog->id,
             ]);
 
             return response('OK', 200);
 
         } catch (\Exception $e) {
-            Log::error('CDR callback failed', [
+            Log::error('CDR webhook processing failed', [
                 'error' => $e->getMessage(),
                 'payload' => $request->all(),
                 'trace' => $e->getTraceAsString(),
@@ -429,6 +453,27 @@ class VoiceApplicationController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Map Cloudonix CDR disposition to standardized disposition
+     */
+    private function mapCdrDisposition(string $cloudonixDisposition): string
+    {
+        $dispositionMap = [
+            'CONNECTED' => 'ANSWER',
+            'ANSWERED' => 'ANSWER',
+            'ANSWER' => 'ANSWER',
+            'BUSY' => 'BUSY',
+            'CANCEL' => 'CANCEL',
+            'FAILED' => 'FAILED',
+            'CONGESTION' => 'CONGESTION',
+            'NOANSWER' => 'NOANSWER',
+            'NO ANSWER' => 'NOANSWER',
+            // Add other mappings as needed
+        ];
+
+        return $dispositionMap[strtoupper($cloudonixDisposition)] ?? 'FAILED'; // Default to FAILED
     }
 
     /**

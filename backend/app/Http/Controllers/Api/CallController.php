@@ -4,9 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CallSession;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 
 class CallController extends Controller
 {
@@ -87,7 +86,7 @@ class CallController extends Controller
     {
         $startTime = $call->call_start_time ?? $call->webhook_created_at ?? $call->created_at;
 
-        if (!$startTime) {
+        if (! $startTime) {
             return 0;
         }
 

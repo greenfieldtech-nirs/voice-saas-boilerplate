@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
@@ -25,14 +25,14 @@ Route::get('/health', function () {
             'services' => [
                 'database' => 'connected',
                 'cache' => config('cache.default') === 'redis' ? 'connected' : 'file',
-            ]
+            ],
         ], 200);
 
     } catch (\Exception $e) {
         return response()->json([
             'status' => 'unhealthy',
             'timestamp' => now()->toISOString(),
-            'error' => $e->getMessage()
+            'error' => $e->getMessage(),
         ], 500);
     }
 });

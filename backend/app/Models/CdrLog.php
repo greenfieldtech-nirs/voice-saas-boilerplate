@@ -60,6 +60,7 @@ class CdrLog extends Model
         if ($endDate) {
             return $query->whereBetween('start_time', [$startDate, $endDate]);
         }
+
         return $query->whereDate('start_time', '>=', $startDate);
     }
 

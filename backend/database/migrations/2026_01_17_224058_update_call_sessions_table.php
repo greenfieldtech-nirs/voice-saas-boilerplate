@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::table('call_sessions', function (Blueprint $table) {
             // Update status enum to include 'connected'
             $table->enum('status', ['ringing', 'connected', 'answered', 'completed', 'failed', 'busy'])
-                  ->default('ringing')
-                  ->change();
+                ->default('ringing')
+                ->change();
 
             // Add new columns for Cloudonix webhook data (only those not already existing)
             $table->string('domain')->nullable()->after('session_id');
@@ -63,8 +63,8 @@ return new class extends Migration
 
             // Revert status enum to original
             $table->enum('status', ['ringing', 'answered', 'completed', 'failed', 'busy'])
-                  ->default('ringing')
-                  ->change();
+                ->default('ringing')
+                ->change();
         });
     }
 };

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CdrLog;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -45,35 +45,35 @@ class CdrController extends Controller
         $query = CdrLog::forTenant($request->user()->tenant->id);
 
         // Apply filters
-        if (!empty($validated['from'])) {
-            $query->where('from_number', 'like', '%' . $validated['from'] . '%');
+        if (! empty($validated['from'])) {
+            $query->where('from_number', 'like', '%'.$validated['from'].'%');
         }
 
-        if (!empty($validated['to'])) {
-            $query->where('to_number', 'like', '%' . $validated['to'] . '%');
+        if (! empty($validated['to'])) {
+            $query->where('to_number', 'like', '%'.$validated['to'].'%');
         }
 
-        if (!empty($validated['disposition'])) {
+        if (! empty($validated['disposition'])) {
             $query->where('disposition', $validated['disposition']);
         }
 
-        if (!empty($validated['token'])) {
-            $query->where('session_token', 'like', '%' . $validated['token'] . '%');
+        if (! empty($validated['token'])) {
+            $query->where('session_token', 'like', '%'.$validated['token'].'%');
         }
 
         // Date range filtering
-        if (!empty($validated['start_date']) || !empty($validated['end_date'])) {
+        if (! empty($validated['start_date']) || ! empty($validated['end_date'])) {
             $startDate = $validated['start_date'] ?? '1970-01-01';
             $endDate = $validated['end_date'] ?? now()->toDateString();
-            $query->whereBetween('start_time', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            $query->whereBetween('start_time', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
         }
 
         // Time range filtering (within the date range)
-        if (!empty($validated['start_time']) || !empty($validated['end_time'])) {
+        if (! empty($validated['start_time']) || ! empty($validated['end_time'])) {
             $startTime = $validated['start_time'] ?? '00:00';
             $endTime = $validated['end_time'] ?? '23:59';
 
-            $query->whereRaw("TIME(start_time) BETWEEN ? AND ?", [$startTime, $endTime]);
+            $query->whereRaw('TIME(start_time) BETWEEN ? AND ?', [$startTime, $endTime]);
         }
 
         // Sorting
@@ -87,14 +87,30 @@ class CdrController extends Controller
 
         // Build applied filters summary
         $appliedFilters = [];
-        if (!empty($validated['from'])) $appliedFilters['from'] = $validated['from'];
-        if (!empty($validated['to'])) $appliedFilters['to'] = $validated['to'];
-        if (!empty($validated['disposition'])) $appliedFilters['disposition'] = $validated['disposition'];
-        if (!empty($validated['token'])) $appliedFilters['token'] = $validated['token'];
-        if (!empty($validated['start_date'])) $appliedFilters['start_date'] = $validated['start_date'];
-        if (!empty($validated['end_date'])) $appliedFilters['end_date'] = $validated['end_date'];
-        if (!empty($validated['start_time'])) $appliedFilters['start_time'] = $validated['start_time'];
-        if (!empty($validated['end_time'])) $appliedFilters['end_time'] = $validated['end_time'];
+        if (! empty($validated['from'])) {
+            $appliedFilters['from'] = $validated['from'];
+        }
+        if (! empty($validated['to'])) {
+            $appliedFilters['to'] = $validated['to'];
+        }
+        if (! empty($validated['disposition'])) {
+            $appliedFilters['disposition'] = $validated['disposition'];
+        }
+        if (! empty($validated['token'])) {
+            $appliedFilters['token'] = $validated['token'];
+        }
+        if (! empty($validated['start_date'])) {
+            $appliedFilters['start_date'] = $validated['start_date'];
+        }
+        if (! empty($validated['end_date'])) {
+            $appliedFilters['end_date'] = $validated['end_date'];
+        }
+        if (! empty($validated['start_time'])) {
+            $appliedFilters['start_time'] = $validated['start_time'];
+        }
+        if (! empty($validated['end_time'])) {
+            $appliedFilters['end_time'] = $validated['end_time'];
+        }
 
         return response()->json([
             'data' => $paginatedResults->items(),
