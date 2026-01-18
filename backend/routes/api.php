@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CallController;
+use App\Http\Controllers\Api\CdrController;
 use App\Http\Controllers\Api\TenantController;
 use App\Http\Controllers\Api\VoiceApplicationController;
 use Illuminate\Http\Request;
@@ -52,6 +53,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Call monitoring and statistics
     Route::get('/calls/active', [CallController::class, 'active']);
     Route::get('/calls/statistics', [CallController::class, 'statistics']);
+
+    // CDR (Call Detail Records) management
+    Route::get('/cdr', [CdrController::class, 'index']);
+    Route::get('/cdr/{id}', [CdrController::class, 'show']);
+    Route::get('/cdr/export', [CdrController::class, 'export']);
 });
 
 // Voice Application Webhook Endpoints (Public - no authentication required)

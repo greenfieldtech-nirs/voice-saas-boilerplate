@@ -91,7 +91,7 @@ CREATE TABLE cdr_logs (
 
 ---
 
-### **Phase 2: CdrController & API Endpoints** 🔄 [In Progress]
+### **Phase 2: CdrController & API Endpoints** ✅ [Completed]
 **Objective**: Create dedicated CDR controller with advanced filtering and pagination
 
 **Controller Structure:**
@@ -184,7 +184,7 @@ $validator = Validator::make($request->all(), [
 
 ---
 
-### **Phase 3: Webhook Integration & Data Mapping** ⏳ [Not Started]
+### **Phase 3: Webhook Integration & Data Mapping** 🔄 [In Progress]
 **Objective**: Update CDR webhook processing to store in dedicated table
 
 **Status Mapping Logic:**
