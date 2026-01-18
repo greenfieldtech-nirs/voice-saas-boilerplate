@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Phone,
+  PhoneCall,
   FileText,
   Menu,
   User,
@@ -17,7 +18,7 @@ interface AdminLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Phone Numbers', href: '/admin/phone-numbers', icon: Phone },
-  { name: 'Live Calls', href: '/admin/live-calls', icon: Phone },
+  { name: 'Live Calls', href: '/admin/live-calls', icon: PhoneCall },
   { name: 'Call Logs', href: '/admin/call-logs', icon: FileText },
 ];
 

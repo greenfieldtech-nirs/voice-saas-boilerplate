@@ -376,11 +376,13 @@ $statusMap = [
 ### **Frontend Components**
 
 #### **Live Calls Table**
-- Session ID, Domain, Caller ID, Destination, Status, Duration, Start Time
-- Real-time updates via WebSocket
-- Status badges with colors
-- Sortable columns
-- Pagination for large datasets
+- Call Start Time, Call Token, From, To, Status, Duration
+- 15-second HTTP polling auto-refresh (WebSocket in Phase 4)
+- Manual refresh button
+- Auto-refresh toggle (enable/disable)
+- Status badges with colors and icons
+- Real-time duration calculation
+- Statistics cards: Active Calls, Completed (24h), Total Count
 
 #### **Dashboard Active Calls Card**
 - Real-time counter updates
@@ -408,7 +410,7 @@ $statusMap = [
 - **Phase 2**: Webhook Processing Engine ✅ Completed
 - **Phase 3**: API Endpoints & Business Logic ✅ Completed
 - **Phase 4**: WebSocket Real-time Updates ⏳ Not Started
-- **Phase 5**: Frontend Live Calls Component ⏳ Not Started
+- **Phase 5**: Frontend Live Calls Component ✅ [Basic Implementation Complete]
 - **Phase 6**: Dashboard Integration ✅ Completed
 - **Phase 7**: Cleanup & Archival System ⏳ Not Started
 - **Phase 8**: Testing & Validation ⏳ Not Started
