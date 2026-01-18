@@ -29,12 +29,6 @@ interface CdrRecord {
   created_at: string;
 }
 
-interface CallStats {
-  active_calls: number;
-  completed_today: number;
-  total_calls: number;
-}
-
 interface PaginationMeta {
   current_page: number;
   per_page: number;
@@ -52,11 +46,7 @@ interface CdrResponse {
 
 export const CallLogs: React.FC = () => {
   const { error } = useToastHelpers();
-  const [callStats, setCallStats] = useState<CallStats>({
-    active_calls: 0,
-    completed_today: 0,
-    total_calls: 0
-  });
+
   const [cdrRecords, setCdrRecords] = useState<CdrRecord[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,14 +100,7 @@ export const CallLogs: React.FC = () => {
       setPagination(cdrResponse.meta);
       setLastRefresh(new Date());
 
-      // For now, use placeholder stats (these could come from a separate endpoint)
-      setCallStats({
-        active_calls: 0, // Would need separate endpoint for live calls
-        completed_today: cdrResponse.data.filter(record =>
-          record.created_at.startsWith(new Date().toISOString().split('T')[0])
-        ).length,
-        total_calls: cdrResponse.meta.total
-      });
+
 
     } catch (err) {
       console.error('Failed to fetch CDR data:', err);
@@ -322,7 +305,7 @@ export const CallLogs: React.FC = () => {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <StatCard
             title="Total Call Records"
             value={pagination?.total || 0}
@@ -330,21 +313,61 @@ export const CallLogs: React.FC = () => {
             color="text-blue-600"
           />
           <StatCard
-            title="Completed Today"
-            value={callStats.completed_today}
+            title="Total Records Today"
+            value={cdrRecords.filter(record =>
+              record.created_at.startsWith(new Date().toISOString().split('T')[0])
+            ).length}
+            icon={Phone}
+            color="text-indigo-600"
+          />
+          <StatCard
+            title="Answered Today"
+            value={cdrRecords.filter(record =>
+              record.created_at.startsWith(new Date().toISOString().split('T')[0]) &&
+              record.disposition === 'ANSWER'
+            ).length}
             icon={CheckCircle}
             color="text-green-600"
           />
           <StatCard
-            title="Avg Call Duration"
-            value={cdrRecords.length > 0
-              ? Math.round(cdrRecords
-                  .filter(r => r.duration_seconds)
-                  .reduce((sum, r) => sum + (r.duration_seconds || 0), 0) / cdrRecords.length)
-              : 0
-            }
+            title="Not Answered Today"
+            value={cdrRecords.filter(record =>
+              record.created_at.startsWith(new Date().toISOString().split('T')[0]) &&
+              record.disposition !== 'ANSWER'
+            ).length}
+            icon={XCircle}
+            color="text-red-600"
+          />
+          <StatCard
+            title="Avg Duration Today (Answered)"
+            value={(() => {
+              const todayAnswered = cdrRecords.filter(record =>
+                record.created_at.startsWith(new Date().toISOString().split('T')[0]) &&
+                record.disposition === 'ANSWER' &&
+                record.duration_seconds
+              );
+              if (todayAnswered.length === 0) return 0;
+              const totalDuration = todayAnswered.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+              return Math.round(totalDuration / todayAnswered.length);
+            })()}
             icon={Clock}
             color="text-purple-600"
+          />
+          <StatCard
+            title="Success Ratio (60 min)"
+            value={(() => {
+              const sixtyMinutesAgo = new Date(Date.now() - 60 * 60 * 1000);
+              const recentCalls = cdrRecords.filter(record =>
+                new Date(record.created_at) >= sixtyMinutesAgo
+              );
+              if (recentCalls.length === 0) return 0;
+              const successfulCalls = recentCalls.filter(record =>
+                record.disposition === 'ANSWER' || record.disposition === 'BUSY'
+              ).length;
+              return Math.round((successfulCalls / recentCalls.length) * 100);
+            })()}
+            icon={CheckCircle}
+            color="text-emerald-600"
           />
         </div>
 
