@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { LiveCalls } from './pages/LiveCalls';
+import { CallLogs } from './pages/CallLogs';
 import { PhoneNumbers } from './pages/PhoneNumbers';
 import { Profile } from './pages/Profile';
 import { SettingsPage } from './pages/Settings';
@@ -35,7 +36,7 @@ function App() {
           <Route path="/admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/admin/phone-numbers" element={<ProtectedRoute><PhoneNumbers /></ProtectedRoute>} />
           <Route path="/admin/live-calls" element={<ProtectedRoute><LiveCalls /></ProtectedRoute>} />
-          <Route path="/admin/call-logs" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/admin/call-logs" element={<ProtectedRoute><CallLogs /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
