@@ -1,159 +1,174 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
+import { useToastHelpers } from '../components/toast';
 import {
-  FileText,
-  Clock,
-  ChevronDown,
-  ChevronUp,
   Phone,
   PhoneOff,
+  PhoneCall,
+  RefreshCw,
+  CheckCircle,
   XCircle,
-  AlertCircle,
-  ExternalLink,
-  PhoneMissed
+  Clock,
+  Filter
 } from 'lucide-react';
 
-interface CallLog {
-  id: string;
-  callStartTime: number;
-  token: string;
-  from: string;
-  to: string;
-  status: 'ANSWER' | 'BUSY' | 'CANCEL' | 'FAILED' | 'ERROR' | 'EXTERNAL' | 'NOANSWER';
-  duration: number;
-  metaData: any;
+interface CdrRecord {
+  id: number;
+  call_id: string;
+  session_token: string;
+  from_number: string;
+  to_number: string;
+  direction: string;
+  disposition: 'ANSWER' | 'BUSY' | 'CANCEL' | 'FAILED' | 'CONGESTION' | 'NOANSWER';
+  start_time: string;
+  answer_time: string | null;
+  end_time: string | null;
+  duration_seconds: number | null;
+  billsec: number | null;
+  domain: string;
+  created_at: string;
 }
 
-// Mock data based on the provided CDR sample
-const mockCallLogs: CallLog[] = [
-  {
-    id: '1',
-    callStartTime: 1716239100387,
-    token: '3caa3541d5f8497e9c79ea30ef689677',
-    from: 'cdrFromIdentString',
-    to: 'cdrDestinationIdentString',
-    status: 'ANSWER',
-    duration: 33,
-    metaData: {
-      timestamp: 1716239100,
-      domain: 'nullDomain',
-      subscriber: null,
-      cx_trunk_id: null,
-      application: null,
-      route: null,
-      billsec: 31,
-      disposition: 'CONNECTED',
-      rated_cost: null,
-      approx_cost: null,
-      sell_cost: null,
-      vapp_server: '172.24.xxx.xxx',
-      call_id: '0b515a4c3c683a5c51048b2c3758719f@xxx.xxx.xxx.xxx:5060',
-      session: {
-        id: 9812750,
-        domainId: 755,
-        domain: null,
-        destination: 'cdrDestinationIdentString',
-        callerId: 'cdrFromIdentString',
-        timeLimit: 0,
-        callStartTime: 1716239100387,
-        callEndTime: 1716239134343,
-        callAnswerTime: 1716239102610,
-        status: 'connected',
-        vappServer: '172.24.xxx.xxx'
-      }
-    }
-  },
-  {
-    id: '2',
-    callStartTime: 1716238500000,
-    token: 'a1b2c3d4e5f6789abcdef0123456789',
-    from: '+1234567890',
-    to: '+0987654321',
-    status: 'BUSY',
-    duration: 0,
-    metaData: {
-      timestamp: 1716238500,
-      domain: 'company.example.com',
-      subscriber: 'user123',
-      disposition: 'BUSY',
-      call_id: 'busy-call-123@example.com',
-      session: {
-        status: 'busy',
-        vappServer: '172.24.xxx.xxx'
-      }
-    }
-  },
-  {
-    id: '3',
-    callStartTime: 1716237900000,
-    token: 'f9e8d7c6b5a4987654321fedcba98765',
-    from: '+1555123456',
-    to: '+1555987654',
-    status: 'NOANSWER',
-    duration: 25,
-    metaData: {
-      timestamp: 1716237900,
-      domain: 'voip.example.com',
-      disposition: 'NOANSWER',
-      call_id: 'noanswer-call-456@example.com',
-      session: {
-        status: 'noanswer',
-        vappServer: '172.24.xxx.xxx'
-      }
-    }
-  },
-  {
-    id: '4',
-    callStartTime: 1716237300000,
-    token: '1234567890abcdef1234567890abcdef',
-    from: '+1444987654',
-    to: '+1444123456',
-    status: 'FAILED',
-    duration: 5,
-    metaData: {
-      timestamp: 1716237300,
-      domain: 'telecom.example.com',
-      disposition: 'FAILED',
-      call_id: 'failed-call-789@example.com',
-      session: {
-        status: 'error',
-        vappServer: '172.24.xxx.xxx'
-      }
-    }
-  },
-  {
-    id: '5',
-    callStartTime: 1716236700000,
-    token: 'abcdef1234567890abcdef1234567890',
-    from: '+16665551234',
-    to: '+16669876543',
-    status: 'CANCEL',
-    duration: 8,
-    metaData: {
-      timestamp: 1716236700,
-      domain: 'callcenter.example.com',
-      disposition: 'CANCEL',
-      call_id: 'cancel-call-101@example.com',
-      session: {
-        status: 'cancel',
-        vappServer: '172.24.xxx.xxx'
-      }
-    }
-  }
-];
+interface CallStats {
+  active_calls: number;
+  completed_today: number;
+  total_calls: number;
+}
+
+interface PaginationMeta {
+  current_page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+  from: number | null;
+  to: number | null;
+}
+
+interface CdrResponse {
+  data: CdrRecord[];
+  meta: PaginationMeta;
+  filters_applied: Record<string, any>;
+}
 
 export const CallLogs: React.FC = () => {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const { error } = useToastHelpers();
+  const [callStats, setCallStats] = useState<CallStats>({
+    active_calls: 0,
+    completed_today: 0,
+    total_calls: 0
+  });
+  const [cdrRecords, setCdrRecords] = useState<CdrRecord[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  // Filter logs based on selected status
-  const filteredLogs = selectedStatus === 'ALL'
-    ? mockCallLogs
-    : mockCallLogs.filter(log => log.status === selectedStatus);
+  // Filter states
+  const [filters, setFilters] = useState({
+    from: '',
+    to: '',
+    disposition: '',
+    start_date: '',
+    end_date: '',
+    token: '',
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
 
-  // Format date/time from milliseconds
-  const formatDateTime = (timestampMs: number): string => {
-    const date = new Date(timestampMs);
+  // Fetch data from CDR API
+  const fetchData = useCallback(async () => {
+    try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        per_page: perPage.toString(),
+      });
+
+      // Add filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          params.append(key, value);
+        }
+      });
+
+      // Fetch CDR records
+      const response = await fetch(`http://localhost:8000/api/cdr?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch CDR records');
+      }
+
+      const cdrResponse: CdrResponse = await response.json();
+
+      // Update state
+      setCdrRecords(cdrResponse.data);
+      setPagination(cdrResponse.meta);
+      setLastRefresh(new Date());
+
+      // For now, use placeholder stats (these could come from a separate endpoint)
+      setCallStats({
+        active_calls: 0, // Would need separate endpoint for live calls
+        completed_today: cdrResponse.data.filter(record =>
+          record.created_at.startsWith(new Date().toISOString().split('T')[0])
+        ).length,
+        total_calls: cdrResponse.meta.total
+      });
+
+    } catch (err) {
+      console.error('Failed to fetch CDR data:', err);
+      error(
+        'Failed to Load Call Logs',
+        'Unable to fetch call log data. Please check your connection.',
+        err instanceof Error ? err.message : 'Unknown error'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [error, currentPage, perPage, filters]);
+
+  // Initial load
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Get disposition color and icon
+  const getDispositionInfo = (disposition: string) => {
+    switch (disposition) {
+      case 'ANSWER':
+        return { color: 'text-green-600 bg-green-100', icon: CheckCircle, label: 'Answered' };
+      case 'BUSY':
+        return { color: 'text-orange-600 bg-orange-100', icon: PhoneOff, label: 'Busy' };
+      case 'CANCEL':
+        return { color: 'text-yellow-600 bg-yellow-100', icon: XCircle, label: 'Cancelled' };
+      case 'FAILED':
+        return { color: 'text-red-600 bg-red-100', icon: XCircle, label: 'Failed' };
+      case 'CONGESTION':
+        return { color: 'text-purple-600 bg-purple-100', icon: PhoneOff, label: 'Congestion' };
+      case 'NOANSWER':
+        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: 'No Answer' };
+      default:
+        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: disposition };
+    }
+  };
+
+  // Format duration
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  };
+
+  // Format date/time
+  const formatDateTime = (dateString: string): string => {
+    const date = new Date(dateString);
     return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -163,48 +178,24 @@ export const CallLogs: React.FC = () => {
     });
   };
 
-  // Format duration
-  const formatDuration = (seconds: number): string => {
-    if (seconds === 0) return '0s';
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-  };
-
-  // Get status color and icon
-  const getStatusInfo = (status: string) => {
-    switch (status) {
-      case 'ANSWER':
-        return { color: 'text-green-600 bg-green-100', icon: Phone, label: 'Answered' };
-      case 'BUSY':
-        return { color: 'text-orange-600 bg-orange-100', icon: PhoneOff, label: 'Busy' };
-      case 'CANCEL':
-        return { color: 'text-gray-600 bg-gray-100', icon: XCircle, label: 'Cancelled' };
-      case 'FAILED':
-        return { color: 'text-red-600 bg-red-100', icon: XCircle, label: 'Failed' };
-      case 'ERROR':
-        return { color: 'text-red-600 bg-red-100', icon: AlertCircle, label: 'Error' };
-      case 'EXTERNAL':
-        return { color: 'text-blue-600 bg-blue-100', icon: ExternalLink, label: 'External' };
-      case 'NOANSWER':
-        return { color: 'text-yellow-600 bg-yellow-100', icon: PhoneMissed, label: 'No Answer' };
-      default:
-        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: status };
-    }
-  };
-
-  const toggleRowExpansion = (id: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRows(newExpanded);
-  };
-
-  const statusOptions = ['ALL', 'ANSWER', 'BUSY', 'CANCEL', 'FAILED', 'ERROR', 'EXTERNAL', 'NOANSWER'];
+  const StatCard: React.FC<{
+    title: string;
+    value: number;
+    icon: React.ComponentType<any>;
+    color: string;
+  }> = ({ title, value, icon: Icon, color }) => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className={`text-3xl font-bold ${color} mt-2`}>{value.toLocaleString()}</p>
+        </div>
+        <div className={`p-3 rounded-full ${color.replace('text-', 'bg-').replace('600', '100')}`}>
+          <Icon className={`w-6 h-6 ${color}`} />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <AdminLayout>
@@ -214,42 +205,176 @@ export const CallLogs: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Call Logs</h1>
             <p className="text-gray-600 mt-1">
-              Historical call records and completed calls
+              Historical call records and CDR data
             </p>
           </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">Filter by Status:</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          <div className="flex items-center space-x-3">
+            <span className="text-sm text-gray-500">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </span>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              {statusOptions.map(status => (
-                <option key={status} value={status}>
-                  {status === 'ALL' ? 'All Statuses' : getStatusInfo(status).label}
-                </option>
-              ))}
-            </select>
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+            </button>
+            <button
+              onClick={fetchData}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </button>
           </div>
         </div>
 
-        {/* Call Logs Table */}
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Number</label>
+                <input
+                  type="text"
+                  value={filters.from}
+                  onChange={(e) => setFilters(prev => ({ ...prev, from: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search from number..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Number</label>
+                <input
+                  type="text"
+                  value={filters.to}
+                  onChange={(e) => setFilters(prev => ({ ...prev, to: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search to number..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Disposition</label>
+                <select
+                  value={filters.disposition}
+                  onChange={(e) => setFilters(prev => ({ ...prev, disposition: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">All Dispositions</option>
+                  <option value="ANSWER">Answered</option>
+                  <option value="BUSY">Busy</option>
+                  <option value="CANCEL">Cancelled</option>
+                  <option value="FAILED">Failed</option>
+                  <option value="CONGESTION">Congestion</option>
+                  <option value="NOANSWER">No Answer</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Session Token</label>
+                <input
+                  type="text"
+                  value={filters.token}
+                  onChange={(e) => setFilters(prev => ({ ...prev, token: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search token..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={filters.start_date}
+                  onChange={(e) => setFilters(prev => ({ ...prev, start_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={filters.end_date}
+                  onChange={(e) => setFilters(prev => ({ ...prev, end_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div className="md:col-span-2 flex items-end space-x-2">
+                <button
+                  onClick={() => {
+                    setFilters({ from: '', to: '', disposition: '', start_date: '', end_date: '', token: '' });
+                    setCurrentPage(1);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Clear Filters
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentPage(1);
+                    fetchData();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard
+            title="Total Call Records"
+            value={pagination?.total || 0}
+            icon={PhoneCall}
+            color="text-blue-600"
+          />
+          <StatCard
+            title="Completed Today"
+            value={callStats.completed_today}
+            icon={CheckCircle}
+            color="text-green-600"
+          />
+          <StatCard
+            title="Avg Call Duration"
+            value={cdrRecords.length > 0
+              ? Math.round(cdrRecords
+                  .filter(r => r.duration_seconds)
+                  .reduce((sum, r) => sum + (r.duration_seconds || 0), 0) / cdrRecords.length)
+              : 0
+            }
+            icon={Clock}
+            color="text-purple-600"
+          />
+        </div>
+
+        {/* CDR Records Table */}
         <div className="bg-white shadow-sm rounded-lg border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Call Records</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Completed calls with detailed information
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Call Records</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Historical call detail records (CDR)
+                </p>
+              </div>
+              {pagination && (
+                <div className="text-sm text-gray-500">
+                  Showing {pagination.from}-{pagination.to} of {pagination.total} records
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
-            {filteredLogs.length === 0 ? (
+            {loading ? (
               <div className="p-8 text-center">
-                <FileText className="w-12 h-12 text-gray-400 mx-auto" />
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
+                <p className="text-gray-500 mt-2">Loading call records...</p>
+              </div>
+            ) : cdrRecords.length === 0 ? (
+              <div className="p-8 text-center">
+                <Phone className="w-12 h-12 text-gray-400 mx-auto" />
                 <p className="text-gray-500 mt-2">No call records found</p>
               </div>
             ) : (
@@ -257,10 +382,10 @@ export const CallLogs: React.FC = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Call Start Time
+                      Start Time
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Call Token
+                      Call ID
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       From
@@ -269,87 +394,101 @@ export const CallLogs: React.FC = () => {
                       To
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      Disposition
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Duration
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Meta Data
+                      Billable
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredLogs.map((log) => {
-                    const statusInfo = getStatusInfo(log.status);
-                    const StatusIcon = statusInfo.icon;
-                    const isExpanded = expandedRows.has(log.id);
+                  {cdrRecords.map((record) => {
+                    const dispositionInfo = getDispositionInfo(record.disposition);
+                    const DispositionIcon = dispositionInfo.icon;
 
                     return (
-                      <React.Fragment key={log.id}>
-                        <tr className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatDateTime(log.callStartTime)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                            {log.token}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {log.from}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {log.to}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                              <StatusIcon className="w-3 h-3 mr-1" />
-                              {statusInfo.label}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <div className="flex items-center">
-                              <Clock className="w-4 h-4 text-gray-400 mr-1" />
-                              {formatDuration(log.duration)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <button
-                              onClick={() => toggleRowExpansion(log.id)}
-                              className="inline-flex items-center text-indigo-600 hover:text-indigo-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                            >
-                              {isExpanded ? (
-                                <>
-                                  <ChevronUp className="w-4 h-4 mr-1" />
-                                  Hide
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="w-4 h-4 mr-1" />
-                                  Show
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr className="bg-gray-50">
-                            <td colSpan={7} className="px-6 py-4">
-                              <div className="bg-white border border-gray-200 rounded-md p-4">
-                                <h4 className="text-sm font-medium text-gray-900 mb-2">Call Details</h4>
-                                <pre className="text-xs text-gray-600 bg-gray-50 p-3 rounded border overflow-x-auto">
-                                  {JSON.stringify(log.metaData, null, 2)}
-                                </pre>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                      <tr key={record.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {record.start_time ? formatDateTime(record.start_time) : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                          {record.call_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {record.from_number || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {record.to_number || 'Unknown'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${dispositionInfo.color}`}>
+                            <DispositionIcon className="w-3 h-3 mr-1" />
+                            {dispositionInfo.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center">
+                            <Clock className="w-4 h-4 text-gray-400 mr-1" />
+                            {record.duration_seconds ? formatDuration(record.duration_seconds) : 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {record.billsec ? formatDuration(record.billsec) : 'N/A'}
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* Pagination */}
+          {pagination && pagination.last_page > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-700">Per page:</label>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+
+                <span className="text-sm text-gray-700">
+                  Page {pagination.current_page} of {pagination.last_page}
+                </span>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(pagination.last_page, prev + 1))}
+                  disabled={currentPage === pagination.last_page}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>
