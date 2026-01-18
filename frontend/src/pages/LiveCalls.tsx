@@ -6,15 +6,10 @@ import {
   PhoneOff,
   PhoneCall,
   RefreshCw,
-  Play,
-  Pause,
   CheckCircle,
   XCircle,
   Clock,
-  Filter,
-  Search,
-  Calendar,
-  Download
+  Filter
 } from 'lucide-react';
 
 interface CdrRecord {
