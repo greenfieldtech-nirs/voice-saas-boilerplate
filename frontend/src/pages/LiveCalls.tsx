@@ -10,24 +10,49 @@ import {
   Pause,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Filter,
+  Search,
+  Calendar,
+  Download
 } from 'lucide-react';
 
-interface CallSession {
+interface CdrRecord {
   id: number;
-  session_id: string;
-  token: string;
-  caller_id: string;
-  destination: string;
-  status: 'ringing' | 'connected' | 'answered' | 'completed' | 'failed' | 'busy';
-  call_start_time: string;
-  duration_seconds: number;
+  call_id: string;
+  session_token: string;
+  from_number: string;
+  to_number: string;
+  direction: string;
+  disposition: 'ANSWER' | 'BUSY' | 'CANCEL' | 'FAILED' | 'CONGESTION' | 'NOANSWER';
+  start_time: string;
+  answer_time: string | null;
+  end_time: string | null;
+  duration_seconds: number | null;
+  billsec: number | null;
+  domain: string;
+  created_at: string;
 }
 
 interface CallStats {
   active_calls: number;
   completed_today: number;
   total_calls: number;
+}
+
+interface PaginationMeta {
+  current_page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+  from: number | null;
+  to: number | null;
+}
+
+interface CdrResponse {
+  data: CdrRecord[];
+  meta: PaginationMeta;
+  filters_applied: Record<string, any>;
 }
 
 export const LiveCalls: React.FC = () => {
@@ -37,77 +62,84 @@ export const LiveCalls: React.FC = () => {
     completed_today: 0,
     total_calls: 0
   });
-  const [activeCalls, setActiveCalls] = useState<CallSession[]>([]);
+  const [cdrRecords, setCdrRecords] = useState<CdrRecord[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  // Fetch data from APIs
+  // Filter states
+  const [filters, setFilters] = useState({
+    from: '',
+    to: '',
+    disposition: '',
+    start_date: '',
+    end_date: '',
+    token: '',
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+
+  // Fetch data from CDR API
   const fetchData = useCallback(async () => {
     try {
-      // Fetch call statistics
-      const statsResponse = await fetch('http://localhost:8000/api/calls/statistics', {
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        per_page: perPage.toString(),
+      });
+
+      // Add filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          params.append(key, value);
+        }
+      });
+
+      // Fetch CDR records
+      const response = await fetch(`http://localhost:8000/api/cdr?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Accept': 'application/json',
         },
       });
 
-      if (!statsResponse.ok) {
-        throw new Error('Failed to fetch call statistics');
+      if (!response.ok) {
+        throw new Error('Failed to fetch CDR records');
       }
 
-      const callStatsData = await statsResponse.json();
-
-      // Fetch active calls
-      const activeResponse = await fetch('http://localhost:8000/api/calls/active', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!activeResponse.ok) {
-        throw new Error('Failed to fetch active calls');
-      }
-
-      const activeCallsData = await activeResponse.json();
+      const cdrResponse: CdrResponse = await response.json();
 
       // Update state
-      setCallStats({
-        active_calls: callStatsData.active_calls || 0,
-        completed_today: callStatsData.completed_today || 0,
-        total_calls: (callStatsData.total_today || 0) + (callStatsData.active_calls || 0)
-      });
-
-      setActiveCalls(activeCallsData.data || []);
+      setCdrRecords(cdrResponse.data);
+      setPagination(cdrResponse.meta);
       setLastRefresh(new Date());
 
+      // For now, use placeholder stats (these could come from a separate endpoint)
+      setCallStats({
+        active_calls: 0, // Would need separate endpoint for live calls
+        completed_today: cdrResponse.data.filter(record =>
+          record.created_at.startsWith(new Date().toISOString().split('T')[0])
+        ).length,
+        total_calls: cdrResponse.meta.total
+      });
+
     } catch (err) {
-      console.error('Failed to fetch data:', err);
+      console.error('Failed to fetch CDR data:', err);
       error(
-        'Failed to Load Live Calls',
-        'Unable to fetch call data. Please check your connection.',
+        'Failed to Load Call Logs',
+        'Unable to fetch call log data. Please check your connection.',
         err instanceof Error ? err.message : 'Unknown error'
       );
     } finally {
       setLoading(false);
     }
-  }, [error]);
+  }, [error, currentPage, perPage, filters]);
 
-  // Initial load and auto-refresh
+  // Initial load
   useEffect(() => {
     fetchData();
-
-    let interval: NodeJS.Timeout;
-    if (autoRefresh) {
-      interval = setInterval(fetchData, 15000); // Refresh every 15 seconds
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [autoRefresh, error, fetchData]);
+  }, [fetchData]);
 
   // Format duration
   const formatDuration = (seconds: number): string => {
@@ -131,23 +163,23 @@ export const LiveCalls: React.FC = () => {
     });
   };
 
-  // Get status color and icon
-  const getStatusInfo = (status: string) => {
-    switch (status) {
-      case 'ringing':
-        return { color: 'text-yellow-600 bg-yellow-100', icon: Phone, label: 'Ringing' };
-      case 'connected':
-        return { color: 'text-green-600 bg-green-100', icon: PhoneCall, label: 'Connected' };
-      case 'answered':
-        return { color: 'text-blue-600 bg-blue-100', icon: PhoneCall, label: 'Answered' };
-      case 'completed':
-        return { color: 'text-green-600 bg-green-100', icon: CheckCircle, label: 'Completed' };
-      case 'failed':
-        return { color: 'text-red-600 bg-red-100', icon: XCircle, label: 'Failed' };
-      case 'busy':
+  // Get disposition color and icon
+  const getDispositionInfo = (disposition: string) => {
+    switch (disposition) {
+      case 'ANSWER':
+        return { color: 'text-green-600 bg-green-100', icon: CheckCircle, label: 'Answered' };
+      case 'BUSY':
         return { color: 'text-orange-600 bg-orange-100', icon: PhoneOff, label: 'Busy' };
+      case 'CANCEL':
+        return { color: 'text-yellow-600 bg-yellow-100', icon: XCircle, label: 'Cancelled' };
+      case 'FAILED':
+        return { color: 'text-red-600 bg-red-100', icon: XCircle, label: 'Failed' };
+      case 'CONGESTION':
+        return { color: 'text-purple-600 bg-purple-100', icon: PhoneOff, label: 'Congestion' };
+      case 'NOANSWER':
+        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: 'No Answer' };
       default:
-        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: status };
+        return { color: 'text-gray-600 bg-gray-100', icon: Phone, label: disposition };
     }
   };
 
@@ -176,9 +208,9 @@ export const LiveCalls: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Live Calls</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Call Logs</h1>
             <p className="text-gray-600 mt-1">
-              Real-time call monitoring and statistics
+              Historical call records and CDR data
             </p>
           </div>
           <div className="flex items-center space-x-3">
@@ -186,34 +218,113 @@ export const LiveCalls: React.FC = () => {
               Last updated: {lastRefresh.toLocaleTimeString()}
             </span>
             <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+            </button>
+            <button
               onClick={fetchData}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </button>
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`inline-flex items-center px-4 py-2 border rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                autoRefresh
-                  ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'
-                  : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-              }`}
-            >
-              {autoRefresh ? (
-                <>
-                  <Pause className="w-4 h-4 mr-2" />
-                  Pause Auto-refresh
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Resume Auto-refresh
-                </>
-              )}
-            </button>
           </div>
         </div>
+
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Number</label>
+                <input
+                  type="text"
+                  value={filters.from}
+                  onChange={(e) => setFilters(prev => ({ ...prev, from: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search from number..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Number</label>
+                <input
+                  type="text"
+                  value={filters.to}
+                  onChange={(e) => setFilters(prev => ({ ...prev, to: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search to number..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Disposition</label>
+                <select
+                  value={filters.disposition}
+                  onChange={(e) => setFilters(prev => ({ ...prev, disposition: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">All Dispositions</option>
+                  <option value="ANSWER">Answered</option>
+                  <option value="BUSY">Busy</option>
+                  <option value="CANCEL">Cancelled</option>
+                  <option value="FAILED">Failed</option>
+                  <option value="CONGESTION">Congestion</option>
+                  <option value="NOANSWER">No Answer</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Session Token</label>
+                <input
+                  type="text"
+                  value={filters.token}
+                  onChange={(e) => setFilters(prev => ({ ...prev, token: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Search token..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={filters.start_date}
+                  onChange={(e) => setFilters(prev => ({ ...prev, start_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={filters.end_date}
+                  onChange={(e) => setFilters(prev => ({ ...prev, end_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div className="md:col-span-2 flex items-end space-x-2">
+                <button
+                  onClick={() => {
+                    setFilters({ from: '', to: '', disposition: '', start_date: '', end_date: '', token: '' });
+                    setCurrentPage(1);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Clear Filters
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentPage(1);
+                    fetchData();
+                  }}
+                  className="px-4 py-2 bg-indigo-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -237,35 +348,44 @@ export const LiveCalls: React.FC = () => {
           />
         </div>
 
-        {/* Active Calls Table */}
+        {/* CDR Records Table */}
         <div className="bg-white shadow-sm rounded-lg border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Active Calls</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Currently active voice calls in the system
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Call Records</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Historical call detail records (CDR)
+                </p>
+              </div>
+              {pagination && (
+                <div className="text-sm text-gray-500">
+                  Showing {pagination.from}-{pagination.to} of {pagination.total} records
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             {loading ? (
               <div className="p-8 text-center">
                 <RefreshCw className="w-8 h-8 animate-spin mx-auto text-gray-400" />
-                <p className="text-gray-500 mt-2">Loading active calls...</p>
+                <p className="text-gray-500 mt-2">Loading call records...</p>
               </div>
-            ) : activeCalls.length === 0 ? (
+            ) : cdrRecords.length === 0 ? (
               <div className="p-8 text-center">
                 <Phone className="w-12 h-12 text-gray-400 mx-auto" />
-                <p className="text-gray-500 mt-2">No active calls at the moment</p>
+                <p className="text-gray-500 mt-2">No call records found</p>
               </div>
             ) : (
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Call Start Time
+                      Start Time
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Call Token
+                      Call ID
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       From
@@ -274,43 +394,49 @@ export const LiveCalls: React.FC = () => {
                       To
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
+                      Disposition
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Duration
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Billable
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {activeCalls.map((call) => {
-                    const statusInfo = getStatusInfo(call.status);
-                    const StatusIcon = statusInfo.icon;
+                  {cdrRecords.map((record) => {
+                    const dispositionInfo = getDispositionInfo(record.disposition);
+                    const DispositionIcon = dispositionInfo.icon;
 
                     return (
-                      <tr key={call.id} className="hover:bg-gray-50">
+                      <tr key={record.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {call.call_start_time ? formatDateTime(call.call_start_time) : 'N/A'}
+                          {record.start_time ? formatDateTime(record.start_time) : 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                          {call.token || call.session_id}
+                          {record.call_id}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {call.caller_id || 'Unknown'}
+                          {record.from_number || 'Unknown'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {call.destination || 'Unknown'}
+                          {record.to_number || 'Unknown'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                            <StatusIcon className="w-3 h-3 mr-1" />
-                            {statusInfo.label}
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${dispositionInfo.color}`}>
+                            <DispositionIcon className="w-3 h-3 mr-1" />
+                            {dispositionInfo.label}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex items-center">
                             <Clock className="w-4 h-4 text-gray-400 mr-1" />
-                            {formatDuration(call.duration_seconds || 0)}
+                            {record.duration_seconds ? formatDuration(record.duration_seconds) : 'N/A'}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {record.billsec ? formatDuration(record.billsec) : 'N/A'}
                         </td>
                       </tr>
                     );
@@ -319,6 +445,50 @@ export const LiveCalls: React.FC = () => {
               </table>
             )}
           </div>
+
+          {/* Pagination */}
+          {pagination && pagination.last_page > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-700">Per page:</label>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+
+                <span className="text-sm text-gray-700">
+                  Page {pagination.current_page} of {pagination.last_page}
+                </span>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(pagination.last_page, prev + 1))}
+                  disabled={currentPage === pagination.last_page}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>
